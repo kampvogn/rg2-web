@@ -1,0 +1,4 @@
+[submodule "d3d9-webgl"]
+	path = d3d9-webgl
+	url = https://github.com/kampvogn/d3d9-webgl.git
+	branch = candytron
