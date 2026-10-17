@@ -71,7 +71,23 @@ var Module = {
 	startMs: Math.max(0, +(new URLSearchParams(location.search).get('t') || 0) * 1000) | 0,
 	onRuntimeInitialized: () => { window.__ready = true; },
 };
+// iPhone/iPad: Safari only starts sound from a tap, and SDL creates its
+// audio context later (when the music starts), so create and start it here
+// and hand it to SDL; ask for playback audio so the silent switch does not
+// mute it (iOS 17+).
+function unlockAudio() {
+	try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch (e) {}
+	const AC = window.AudioContext || window.webkitAudioContext;
+	if (!AC) return;
+	Module.SDL2 = Module.SDL2 || {};
+	if (!Module.SDL2.audioContext) Module.SDL2.audioContext = new AC();
+	const c = Module.SDL2.audioContext;
+	if (c.state !== 'running') c.resume();
+	// a moment of silence, played in the tap, wakes the output on older iOS
+	const b = c.createBufferSource(); b.buffer = c.createBuffer(1, 1, 22050); b.connect(c.destination); b.start(0);
+}
 $('go').addEventListener('click', async () => {
+	unlockAudio();
 	$('start').hidden = true;
 	document.body.classList.add('playing');
 	window.__started = true;
