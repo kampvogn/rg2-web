@@ -97,9 +97,7 @@ int main()
   fvs::conf.triplebuffer = sTRUE;
 
   fr::setReportError(errorReport);
-  printf("DBG startup\n");
   fvs::startupDirectX(0);
-  printf("DBG engineInit\n");
   engineInit();
 
   if (loaderTune)
@@ -109,16 +107,13 @@ int main()
   }
 
   // perform precalc
-  printf("DBG opsInitialize\n");
   const sU8* viruzPtr = opsInitialize(dataPtr);
-  printf("DBG opsCalculate\n");
   opsCalculate(tgPoll);
   web_progress(1);
 
   if (loaderTune)
     ssClose();
 
-  printf("DBG ssInit at offset %d\n", (int)(viruzPtr - data));
   ssInit((sU8*) viruzPtr, 0);
   ssPlay();
   while (ssGetTime() < 0)
