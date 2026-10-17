@@ -16,6 +16,8 @@
 #undef LOOP
 #define THREEINTROS
 
+#ifndef __EMSCRIPTEN__ // kampvogn.dk: the browser's main program is viewer_web.cpp
+
 HWND hViewerWnd;
 
 extern "C" sU8 introData[];
@@ -311,3 +313,5 @@ int __stdcall WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdL
 
 	exitProgram();
 }
+
+#endif

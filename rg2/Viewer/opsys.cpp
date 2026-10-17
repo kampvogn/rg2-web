@@ -1,3 +1,4 @@
+#include <stdio.h>
 // This code is in the public domain. See LICENSE for details.
 
 #include "opsys.h"
@@ -139,6 +140,9 @@ void frTextureOperator::freeData()
 
 void frTextureOperator::updateTexture()
 {
+#ifdef RG2_TRACE
+  printf("TRACE   updateTexture op %p def %02x data %p tex %p texRev %d rev %d refs %d\n", this, def->id, data, tex, (int)texRev, (int)revision, refNum);
+#endif
   if (texRev != revision)
   {
     if (!tex)
@@ -459,7 +463,13 @@ void opsCalculate(void (__stdcall *poll)(sInt counter, sInt max))
       texOp->create(inData->w, inData->h); // create it with appropriate size
     }
 
+#ifdef RG2_TRACE
+    printf("TRACE op %d id %02x refs %d\n", i, op->def->id, op->refNum);
+#endif
     op->process();
+#ifdef RG2_TRACE
+    if (op->def->id < 0x80 && texOp->getData()) printf("TRACE   tex %dx%d\n", texOp->getData()->w, texOp->getData()->h);
+#endif
 
     if (!op->anim)
     {

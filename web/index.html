@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Farbrausch RG2 intros</title>
+<style>
+	html, body { margin: 0; height: 100%; background: #000; color: #aaa; font: 14px/1.5 ui-monospace, "Cascadia Mono", Menlo, Consolas, monospace; overflow: hidden; }
+	#canvas { position: absolute; display: block; background: #000; }
+	#start { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.2em; padding: 16px; text-align: center; }
+	#start[hidden] { display: none; }
+	h1 { margin: 0; font-weight: 400; letter-spacing: .12em; color: #e9c; font-size: 22px; }
+	.info { margin: 0; max-width: 34em; color: #888; font-size: 13px; }
+	.info a, #links a { color: #bbb; }
+	#start button { background: none; color: #ddd; border: 1px solid #555; font: inherit; padding: .6em 1.6em; cursor: pointer; }
+	#start button:hover { border-color: #e9c; color: #fff; }
+	#status { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; pointer-events: none; }
+	#links { position: absolute; right: 12px; top: 8px; font-size: 12px; display: flex; gap: 1em; }
+	body.playing #links { opacity: 0; transition: opacity 1s; }
+	body.playing #links:hover { opacity: 1; }
+</style>
+</head>
+<body>
+<canvas id="canvas" width="800" height="600"></canvas>
+<div id="start">
+	<h1 id="title"></h1>
+	<p class="info" id="meta"></p>
+	<button id="go" type="button">▶ Start (with sound)</button>
+	<p class="info">Built from Farbrausch's
+		<a href="https://github.com/farbrausch/fr_public/tree/master/RG2">published source</a> to WebAssembly and WebGL 2:
+		everything is generated in your browser before it starts, and the music is synthesized as it plays.
+		<a href="https://github.com/kampvogn/rg2-web">How it was ported</a>.</p>
+</div>
+<div id="links"><a href="../">Demos</a><a href="#" id="fs">Fullscreen</a></div>
+<div id="status"></div>
+<script>
+const INTROS = {
+	flybye: { title: 'fr-013: flybye', meta: 'Farbrausch · invitation demo for The Party 2001<br>ryg – code · giZMo – graphics · exoticorn – textures, models · kb – music' },
+	einschlag: { title: 'fr-022: ein.schlag', meta: 'Farbrausch · 64k intro · 2nd at Mekka &amp; Symposium 2002 (final version)<br>cp, kb, ryg, wayfinder – development · gizmo, exoticorn, bombe – RG2 evaluation' },
+	dopplerdefekt: { title: 'fr-029: dopplerdefekt', meta: 'Farbrausch · 64k intro · 2002<br>cp, wf, ryg, kb' },
+};
+const $ = (id) => document.getElementById(id);
+const name = document.body.dataset.intro || new URLSearchParams(location.search).get('intro') || 'flybye';
+const intro = INTROS[name] || INTROS.flybye;
+document.title = intro.title;
+$('title').textContent = intro.title;
+$('meta').innerHTML = intro.meta;
+function fit() {
+	const c = $('canvas'), ar = 4 / 3;
+	const w = Math.min(innerWidth, innerHeight * ar), h = w / ar;
+	Object.assign(c.style, { width: w + 'px', height: h + 'px', left: (innerWidth - w) / 2 + 'px', top: (innerHeight - h) / 2 + 'px' });
+}
+addEventListener('resize', fit); fit();
+addEventListener('keydown', (e) => { if (e.key === 'Escape') Module.webQuit = 1; });
+$('fs').addEventListener('click', (e) => {
+	e.preventDefault();
+	if (document.fullscreenElement) document.exitFullscreen();
+	else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen();
+});
+const data = fetch((document.body.dataset.data || '') + name + '.dat').then((r) => r.arrayBuffer());
+var Module = {
+	canvas: $('canvas'),
+	print: (t) => console.log(t),
+	printErr: (t) => console.warn(t),
+	onProgress: (f) => { $('status').textContent = f >= 1 ? '' : 'generating ' + Math.round(f * 100) + '%'; },
+	onDemoEnd: (why) => {
+		$('status').textContent = why === 'abort' ? 'stopped (error)' : 'the end · reload to watch again';
+		document.body.classList.remove('playing');
+		window.__ended = why || 'end';
+	},
+	onRuntimeInitialized: () => { window.__ready = true; },
+};
+$('go').addEventListener('click', async () => {
+	$('start').hidden = true;
+	document.body.classList.add('playing');
+	window.__started = true;
+	Module.FS.writeFile('/intro.dat', new Uint8Array(await data));
+	Module.callMain([]);
+});
+</script>
+<script src="rg2.js"></script>
+</body>
+</html>

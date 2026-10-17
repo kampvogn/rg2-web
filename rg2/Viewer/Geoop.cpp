@@ -57,6 +57,14 @@ static sF32 sampleTexMap(const sU16* tmap, sInt w, sInt h, sF32 u, sF32 v)
   sInt rx, ry;
   sF32 fx, fy;
 
+#ifdef __EMSCRIPTEN__
+  // kampvogn.dk: fist with the player's FPU mode (truncate), on floats
+  {
+    const sF32 tx = (sF32) w * u, ty = (sF32) h * v;
+    rx = (sInt) tx; fx = tx - (sF32) rx;
+    ry = (sInt) ty; fy = ty - (sF32) ry;
+  }
+#else
   __asm // das gleiche in c++ spackt rum... DANKE, codegen!
   {
     fild    dword ptr [w];
@@ -70,6 +78,7 @@ static sF32 sampleTexMap(const sU16* tmap, sInt w, sInt h, sF32 u, sF32 v)
     fisub   dword ptr [ry];
     fstp    dword ptr [fy];
   }
+#endif
   
   const sInt rx0 = rx * 4, ry0 = ry * w * 4, rx1 = ((rx + 1) & (w - 1)) * 4, ry1 = ((ry + 1) & (h - 1)) * w * 4;
   
@@ -1922,6 +1931,9 @@ class frOpGCShapeAnim: public frGeometryOperator
 	{
 		sInt r;
 
+#ifdef __EMSCRIPTEN__
+		r = (sInt) val; // kampvogn.dk: fistp with the truncating FPU mode
+#else
 		__asm
 		{
 			push	eax;
@@ -1934,6 +1946,7 @@ class frOpGCShapeAnim: public frGeometryOperator
 			fldcw	[esp];
 			pop		ecx;
 		}
+#endif
 
 		return r;
 	}

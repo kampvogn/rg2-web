@@ -231,6 +231,7 @@ static struct defaultLightStruct
   sF32  r, g, b;
   sF32  posx, posy, posz;
   sF32  dirx, diry, dirz;
+  sF32  rest[7]; // kampvogn.dk: the rest of frLight (range .. outerc), which setupLighting copies too (zero; unused by directional lights)
 }
 defaultLightInit=
 {

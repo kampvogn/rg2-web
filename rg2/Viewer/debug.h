@@ -57,9 +57,15 @@ namespace fr
 	extern void setReportError(debug::reportErrorProc error);
 }
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk */
+#define FR_DEBUGBREAK
+#else
+#define FR_DEBUGBREAK __asm{int 3}
+#endif
+
 #ifdef _DEBUG
 
-#define FRDASSERT(x)	if(!(x)){__asm{int 3}fr::errorExit("%s(%d) : Debug Assertion failed!\nExpression: %s",__FILE__,__LINE__,#x);}
+#define FRDASSERT(x)	if(!(x)){FR_DEBUGBREAK; fr::errorExit("%s(%d) : Debug Assertion failed!\nExpression: %s",__FILE__,__LINE__,#x);}
 
 #else
 
@@ -68,7 +74,7 @@ namespace fr
 
 #endif
 
-#define FRASSERT(x)		if(!(x)){__asm{int 3}fr::errorExit("%s(%d) : Assertion failed!\nExpression: %s",__FILE__,__LINE__,#x);}
+#define FRASSERT(x)		if(!(x)){FR_DEBUGBREAK; fr::errorExit("%s(%d) : Assertion failed!\nExpression: %s",__FILE__,__LINE__,#x);}
 
 #pragma warning (disable: 4291)
 

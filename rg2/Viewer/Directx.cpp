@@ -1035,7 +1035,7 @@ namespace fvs
 
   static void generateMipMap(const sU8 *inp, sU32 sw, sU32 sh, sU8 *dst, sInt cpp)
   {
-#if !(defined(FVS_RGBA_TEXTURES_ONLY) && defined(FVS_TINY_TEXTURE_CODE))
+#if !(defined(FVS_RGBA_TEXTURES_ONLY) && defined(FVS_TINY_TEXTURE_CODE)) || defined(__EMSCRIPTEN__) /* kampvogn.dk: the C version */
     sInt  x, y, c, lstep, lsteph, o, io;
 
     FRDASSERT(inp && dst && cpp);
@@ -1944,6 +1944,17 @@ pixlp:
     IUnknown *iface;
     HRESULT hr;
 
+#ifdef __EMSCRIPTEN__
+    // kampvogn.dk: the vtable call below, spelled out
+    {
+      D3DPOOL pool = isDynamic ? D3DPOOL_DEFAULT : D3DPOOL_MANAGED;
+      DWORD usage = isDynamic ? (D3DUSAGE_DYNAMIC | D3DUSAGE_WRITEONLY) : D3DUSAGE_WRITEONLY;
+      if (vto == 92)
+        hr = d3ddev->CreateVertexBuffer(sz * stride, usage, VF, pool, (IDirect3DVertexBuffer8 **) &iface);
+      else
+        hr = d3ddev->CreateIndexBuffer(sz * stride, usage, (D3DFORMAT) VF, pool, (IDirect3DIndexBuffer8 **) &iface);
+    }
+#else
 		// ugly but kinda effective hack follows :)
 
     __asm
@@ -1980,6 +1991,7 @@ madeDecision:
 
       mov     [hr], eax;      // and save result.
     }
+#endif
 
     checkError(hr, "Buffer create failed");
     ibuf = new iD3DBuffer(resourceMgr->add(iface), VF, streamInd, sz, stride, isDynamic);
@@ -1990,6 +2002,7 @@ madeDecision:
 
     ibuf->next = d3dBuffers;
     d3dBuffers = ibuf;
+    return 0; // kampvogn.dk: callers ignore it; MSVC returned whatever was in eax
   }
 
   void bufSlice::destroy()
@@ -2031,7 +2044,7 @@ madeDecision:
 		// but who cares.
     IDirect3DVertexBuffer8 *vb = (IDirect3DVertexBuffer8 *) resourceMgr->getPtr(ibuf->buf);
     sU8 *buf;
-    checkError(vb->Lock((elemBase + lockStart) * ibuf->stride, lockSize * ibuf->stride, &buf, lockMode), "Buffer Lock failed", sFALSE);
+    checkError(vb->Lock((elemBase + lockStart) * ibuf->stride, lockSize * ibuf->stride, (void **) &buf, lockMode), "Buffer Lock failed", sFALSE);
 
     return (void *) buf;
   }

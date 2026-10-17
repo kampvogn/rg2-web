@@ -280,7 +280,7 @@ void frMesh::invertNormals()
 
 // ---- frMaterial
 
-struct defaultMaterialStruct // must match with frMaterial's definition!
+static struct defaultMaterialStruct // must match with frMaterial's definition! (kampvogn.dk: static, Engine.cpp has a defaultMaterial of its own)
 {
 	sInt		tex1, tex2;
 	sU8			flags11, flags12, flags13, flags21;

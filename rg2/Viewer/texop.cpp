@@ -1,6 +1,7 @@
 // This code is in the public domain. See LICENSE for details.
 
 #include "types.h"
+#include "texop_c.h"
 #include "opsys.h"
 #include "texture.h"
 #include "opdata.h"
@@ -292,6 +293,63 @@ frOperator* create_TOTrivial() { return new frOpTOTrivial; }
 
 // ---- text
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+/* kampvogn.dk: GDI's text output in a 2D canvas. Writes the bitmap as GDI's
+   top-down 32-bit DIB would hold it (B, G, R, 0). height is GDI's cell height
+   (CreateFont with a positive height); lines are separated by backslashes. */
+EM_JS(void, web_text, (unsigned char *dst, int w, int h, const char *face, int height, int bold, int italic,
+                       unsigned fg, unsigned bg, int x, int y, const char *text), {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const rgb = (v) => 'rgb(' + (v & 255) + ',' + ((v >> 8) & 255) + ',' + ((v >> 16) & 255) + ')';
+  g.fillStyle = rgb(bg); g.fillRect(0, 0, w, h);
+  const fam = UTF8ToString(face);
+  const font = (px) => (italic ? 'italic ' : '') + (bold ? 'bold ' : '') + px + 'px "' + fam + '", Arimo, Arial, sans-serif';
+  g.font = font(100);
+  let m = g.measureText('Hg'), cell = (m.fontBoundingBoxAscent + m.fontBoundingBoxDescent) || 115;
+  const px = height * 100 / cell;
+  g.font = font(px);
+  m = g.measureText('Hg');
+  const asc = m.fontBoundingBoxAscent || px * 0.9;
+  g.fillStyle = rgb(fg); g.textBaseline = 'alphabetic';
+  UTF8ToString(text).split(String.fromCharCode(92)).forEach((line, i) => g.fillText(line, x, y + i * height + asc));
+  const p = g.getImageData(0, 0, w, h).data;
+  for (let i = 0; i < w * h; i++) {
+    HEAPU8[dst + i * 4] = p[i * 4 + 2]; HEAPU8[dst + i * 4 + 1] = p[i * 4 + 1];
+    HEAPU8[dst + i * 4 + 2] = p[i * 4]; HEAPU8[dst + i * 4 + 3] = 0;
+  }
+});
+
+/* kampvogn.dk: AddFontResource for a TTF in memory: registered under the
+   family name from its 'name' table, which is what CreateFont asks for. */
+EM_ASYNC_JS(void, web_install_font, (const unsigned char *data, int len), {
+  const b = HEAPU8.slice(data, data + len), v = new DataView(b.buffer);
+  let fam = 'rg2font';
+  try {
+    const n = v.getUint16(4);
+    for (let i = 0; i < n; i++) {
+      const r = 12 + i * 16;
+      if (String.fromCharCode(b[r], b[r + 1], b[r + 2], b[r + 3]) !== 'name') continue;
+      const t = v.getUint32(r + 8), cnt = v.getUint16(t + 2), so = t + v.getUint16(t + 4);
+      for (let j = 0; j < cnt; j++) {
+        const e = t + 6 + j * 12, pid = v.getUint16(e), nid = v.getUint16(e + 6);
+        const l = v.getUint16(e + 8), o = so + v.getUint16(e + 10);
+        if (nid !== 1) continue;
+        let s = '';
+        if (pid === 3 || pid === 0) for (let k = 0; k < l; k += 2) s += String.fromCharCode(v.getUint16(o + k));
+        else for (let k = 0; k < l; k++) s += String.fromCharCode(b[o + k]);
+        if (s) { fam = s; if (pid === 3) break; }
+      }
+    }
+  } catch (e) {}
+  const f = new FontFace(fam, b.buffer);
+  await f.load();
+  document.fonts.add(f);
+});
+#endif
+
 class frOpTGText: public frTextureOperator
 {
   const sChar*  strs[2];
@@ -300,6 +358,24 @@ class frOpTGText: public frTextureOperator
 
   void doProcess()
   {
+#ifdef __EMSCRIPTEN__
+    sU16* dst = data->data;
+    sU8* buf = new sU8[data->w * data->h * 4];
+    web_text(buf, data->w, data->h, strs[1], (height * data->h) >> 8, style & 1, (style & 2) != 0,
+             color[0], color[1], xp, yp, strs[0]);
+    const sU8* b = buf;
+    for (sInt i = 0; i < data->size; i++)
+    {
+      dst[0] = b[0] << 7;
+      dst[1] = b[1] << 7;
+      dst[2] = b[2] << 7;
+      dst[3] = 0;
+      dst += 4;
+      b += 4;
+    }
+    delete[] buf;
+  }
+#else
     sU16*   dst = data->data;
     HDC     hDC, hTempDC;
     HFONT   hFont, hOldFont;
@@ -380,6 +456,7 @@ class frOpTGText: public frTextureOperator
     DeleteObject(hBrush);
     DeleteDC(hDC);
   }
+#endif
 
 public:
   const sU8* readData(const sU8* strm)
@@ -522,6 +599,9 @@ class frOpTFAdjust: public frTextureOperator
 
         sS32 hv = hue;
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+        h = texop_c::hueShift(d, max, min, h, hv);
+#else
         __asm
         {
           mov     eax, [d];
@@ -538,6 +618,7 @@ class frOpTFAdjust: public frTextureOperator
           add     eax, ebx;
           mov     [h], eax;
         }
+#endif
 
         const sInt ih = h >> 16;
         const sS32 fh = h & 0xffff;
@@ -594,6 +675,9 @@ class frOpTCAdd: public frTextureOperator
 
       if (gain > 0)
       {
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+        texop_c::addGain(dst, src, cnt, gain);
+#else
         __asm
         {
           mov       esi, [src];
@@ -616,11 +700,15 @@ lp1:
           inc       ecx;
           jnz       lp1;
         }
+#endif
       }
       else if (gain < 0)
       {
         gain = -gain;
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+        texop_c::subGain(dst, src, cnt, gain);
+#else
         __asm
         {
           mov       esi, [src];
@@ -643,10 +731,15 @@ lp2:
           dec       ecx;
           jns       lp2;
         }
+#endif
       }
     }
 
+    
+#ifndef __EMSCRIPTEN__
     __asm emms;
+#endif
+
   }
 
 public:
@@ -849,6 +942,9 @@ class frOpTGPerlin: public frTextureOperator
 
   static sS32 imul16(sS32 a, sS32 b)
   {
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+    a = texop_c::imul16(a, b);
+#else
     __asm
     {
       mov   eax, [a];
@@ -856,6 +952,7 @@ class frOpTGPerlin: public frTextureOperator
       shrd  eax, edx, 16;
       mov   [a], eax;
     }
+#endif
 
     return a;
   }
@@ -962,6 +1059,9 @@ public:
 
   static sU32 srandom2(sU32 n)
   {
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+    n = texop_c::srandom2(n);
+#else
     __asm
     {
       mov   ecx, [n];
@@ -982,6 +1082,7 @@ public:
       sub   eax, ecx;
       mov   [n], eax;
     }
+#endif
 
     return n;
   }
@@ -1113,6 +1214,9 @@ class frOpTCMultiply: public frTextureOperator
     {
       const sU16* src = getInputData(i)->data;
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+      texop_c::multiply(dst, src, cnt);
+#else
       __asm
       {
         mov     esi, [src];
@@ -1130,9 +1234,14 @@ lp:
         inc     ecx;
         jnz     lp;
       }
+#endif
     }
 
+    
+#ifndef __EMSCRIPTEN__
     __asm emms;
+#endif
+
   }
 };
 
@@ -1162,6 +1271,9 @@ class frOpTGCrystal: public frTextureOperator
     const sU32 cnt = count;
     const sU32 sed = seed;
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+    texop_c::crystal(dptr, width, height, sed, cnt, col1, col2);
+#else
     __asm
     {
       mov       edx, [sed];
@@ -1287,6 +1399,7 @@ contrastloop:
       jnz       contrastloop;
       emms;
     };
+#endif
   }
 
 public:
@@ -1330,7 +1443,11 @@ public:
       memset(pbuf+(w+radius)*4, 0, radius*4*sizeof(sU16));
     }
 
+    
+#ifndef __EMSCRIPTEN__
     __asm emms;
+#endif
+
 
     while (h--)
     {
@@ -1355,6 +1472,10 @@ public:
       const sU16 *src=pbuf+radius*4;
       static const sU64 msk1=0x0000ffff0000ffff;
 
+#ifdef __EMSCRIPTEN__ /* kampvogn.dk: texop_c.h */
+      texop_c::blurRow(pbuf, src, dst, w, radius, sc);
+      dst += w*4;
+#else
       __asm
       {
         mov       esi, offset pbuf;
@@ -1439,9 +1560,14 @@ pixlp:
 
         mov       [dst], edi;
       }
+#endif
     }
 
+    
+#ifndef __EMSCRIPTEN__
     __asm emms;
+#endif
+
   }
 
   static void flipAxes(const sU16 *src, sU16 *dst, sInt w, sInt h)
@@ -1551,6 +1677,14 @@ class frOpTFInstallFont: public frTextureOperator
   }
 
 public:
+#ifdef __EMSCRIPTEN__
+	const sU8* readData(const sU8* strm)
+	{
+		sInt len = getSmallInt(strm);
+		web_install_font(strm, len);
+		return strm + len;
+	}
+#else
 	~frOpTFInstallFont()
 	{
 		RemoveFontResource(fontFile);
@@ -1572,6 +1706,7 @@ public:
 
 		return strm;
 	}
+#endif
 };
 
 frOperator* create_TFInstallFont() { return new frOpTFInstallFont; }

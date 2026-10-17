@@ -1,3 +1,5 @@
 tools/err/
 tools/rg2export
 out/
+web/build*/
+web/err/
