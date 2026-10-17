@@ -14,6 +14,9 @@
 #define _RICHEDIT_VER	0x0200
 
 
+#if defined(_HEADLESS) /* kampvogn.dk: headless build (exporter), no ATL/WTL */
+#include "../shim/stdafx_headless.h"
+#else
 #include <atlbase.h>
 #include <atlapp.h>
 
@@ -47,6 +50,7 @@ extern CAppModule _Module;
 #include "math3d_2.h"
 #include "sync.h"
 
+#endif
 //{{AFX_INSERT_LOCATION}}
 // Microsoft Visual C++ will insert additional declarations immediately before the previous line.
 

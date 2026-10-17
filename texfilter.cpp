@@ -10,7 +10,7 @@
 
 // ---- blur helper functions
 
-static sInt gaussKernel[1027];
+sInt gaussKernel[1027]; // kampvogn.dk: not static, the inline asm refers to it by name
 
 typedef sInt *(*filterKernelProc)(sF32 radius, sInt &n, sF32 sc);
 

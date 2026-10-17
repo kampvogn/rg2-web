@@ -107,6 +107,7 @@ static void putToterFloat(fr::stream& f, const sF32 v)
   f.putsU16(dest);
 }
 
+#ifndef _HEADLESS /* kampvogn.dk: the headless exporter writes export.dat only */
 static sU32 relocatePointer(sU32 fileOffset, const sU8* image)
 {
   // fileOffset is relative to start of file. what we need is a final relocated address, though.
@@ -134,6 +135,7 @@ static sU32 relocatePointer(sU32 fileOffset, const sU8* image)
 
   return fileOffset;
 }
+#endif
 
 // ---- frGraphExporter::privateData
 
@@ -760,6 +762,7 @@ struct frGraphExporter::privateData
 
   void linkDemo(fr::stream& out, sU32 loaderTuneOffs)
   {
+#ifndef _HEADLESS
     // step 1: read viewer exe
     TCHAR pbuf[256];
     GetModuleFileName(0, pbuf, 256);
@@ -843,6 +846,7 @@ struct frGraphExporter::privateData
     fr::streamF exported("export.dat", fr::streamF::wr | fr::streamF::cr);
     exported.copy(out[0]);
     exported.close();
+#endif
   }
 
   void printStats() // prints the oh-so-famous export statistics
