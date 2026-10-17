@@ -2259,3 +2259,28 @@ public:
 };
 
 frOperator* create_GFJitter() { return new frOpGFJitter; }
+
+// ---- make ryg happy
+//
+// kampvogn.dk: "Mk Ryg Happy" (id 0x99, deprecated in the tool, used by
+// ein.schlag): the input model without its lights. Exports no data.
+
+class frOpGFMakeRygHappy: public frGeometryOperator
+{
+  void doProcess()
+  {
+    const frModel* input = getInputData(0);
+
+    data->createObjects(input->nObjects);
+    data->lightCount = 0;
+    data->cloneModel(*input, 0);
+  }
+
+public:
+  const sU8* readData(const sU8* strm)
+  {
+    return strm;
+  }
+};
+
+frOperator* create_GFMakeRygHappy() { return new frOpGFMakeRygHappy; }

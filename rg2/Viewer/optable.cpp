@@ -19,6 +19,7 @@ extern frOperator* create_TCMultiply();
 extern frOperator* create_TGCrystal();
 extern frOperator* create_TFBlurV2();
 extern frOperator* create_TFInstallFont();
+extern frOperator* create_TFBlur(); // kampvogn.dk: for flybye
 
 extern frOperator* create_GGPrimitive();
 extern frOperator* create_GCAdd();
@@ -34,6 +35,7 @@ extern frOperator* create_GSLoadMaterial();
 extern frOperator* create_GSLighting();
 extern frOperator* create_GFObjMerge();
 extern frOperator* create_GFApplyLightmap();
+extern frOperator* create_GFMakeRygHappy(); // kampvogn.dk: for ein.schlag
 extern frOperator* create_GFWuschel();
 extern frOperator* create_GFPlode();
 extern frOperator* create_GFDumbNormals();
@@ -52,6 +54,7 @@ frOperatorDef operatorDefs[] =
   0x01,    0, 0, 10,  create_TOTrivial, // rectangle
   0x02,    0, 0,  3,  create_TOTrivial, // solid
   0x03,    0, 0,  0,  create_TGText,
+  0x06,    1, 0,  0,  create_TFBlur, // kampvogn.dk: blur v1 (flybye)
   0x07,    1, 0,  2,  create_TOTrivial, // make normal map
   0x08,    1, 0,  0,  create_TFRotoZoom,
   0x09,    1, 0,  8,  create_TFAdjust,
@@ -65,7 +68,7 @@ frOperatorDef operatorDefs[] =
   0x14, 0xff, 0,  0,  create_TCMultiply,
   0x15,    0, 0,  0,  create_TGCrystal,
   0x16,    1, 0,  0,  create_TFBlurV2,
-	//0x18,		 1, 0,  0,	create_TFInstallFont,
+	0x18,		 1, 0,  0,	create_TFInstallFont, // kampvogn.dk: back in
 
   0x80,    0, 0,  0,  create_GGPrimitive,
   0x81, 0xff, 0,  0,  create_GCAdd,
@@ -80,7 +83,7 @@ frOperatorDef operatorDefs[] =
   0x8d,    1, 1,  0,  create_GSLoadMaterial,
   0x8e,    1, 0,  0,  create_GSLighting,
   0x8f,    1, 0,  0,  create_GFObjMerge,
-  //0x90,    1, 1,  0,  create_GFApplyLightmap,
+  0x90,    1, 1,  0,  create_GFApplyLightmap, // kampvogn.dk: back in (flybye)
   0x92,    1, 0,  0,  create_GFWuschel,
   0x93,    1, 0,  0,  create_GFPlode,
   0x94,    1, 0,  0,  create_GFDumbNormals,
@@ -88,6 +91,7 @@ frOperatorDef operatorDefs[] =
   0x96,    1, 0,  0,  create_GFGlowVerts,
   0x97, 0xff, 0,  0,  create_GCShapeAnim,
   0x98,    1, 0,  0,  create_GSRenderPass,
+  0x99,    1, 0,  0,  create_GFMakeRygHappy, // kampvogn.dk: ein.schlag
 	//0x9c,		 0,	0,  0,	create_GGLorentz,
 	0x9d,		 1, 0,  0,	create_GFJitter,
 

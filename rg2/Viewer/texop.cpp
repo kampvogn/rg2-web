@@ -1710,3 +1710,173 @@ public:
 };
 
 frOperator* create_TFInstallFont() { return new frOpTFInstallFont; }
+
+// ---- blur (v1)
+//
+// kampvogn.dk: the original blur operator (id 0x06), which flybye uses. The
+// final viewer only kept blur v2, so this is RG2's own blur (texfilter.cpp in
+// the tool) for the viewer, in C: box/triangle/gaussian kernel, horizontal
+// then vertical pass, black/clamp/wrap borders. The MMX code it replaces
+// multiplies with the low 16 bits of each kernel weight and scales the sums
+// as unsigned numbers; both are kept.
+
+class frOpTFBlur: public frTextureOperator
+{
+  sInt  filter, wrap;
+  sF32  intens, ra, rb;
+
+  static sInt gk[1027];
+
+  static sInt *dummyKernel(sInt &n, sF32 sc)
+  {
+    n = 3;
+    gk[511] = 0;
+    gk[512] = (sInt) (sc * 512.0f);
+    gk[513] = 0;
+    gk[1026] = 512;
+    return gk + 512;
+  }
+
+  static sInt *kernel(sInt type, sF32 radius, sInt &n, sF32 sc)
+  {
+    if (radius <= 1.0f)
+      return dummyKernel(n, sc);
+
+    sInt i, *out = gk + 512, div;
+    n = (sInt) ceil(radius) * 2 + 1;
+    const sInt len = n >> 1;
+    out[0] = div = 512;
+
+    if (type == 0) // box
+    {
+      for (i = 1; i < len - 1; i++)
+        div += 2 * (out[-i] = out[i] = 512);
+      if (len > 1)
+      {
+        if (radius != floor(radius))
+          div += 2 * (out[-len + 1] = out[len - 1] = (sInt) (512 * (radius - floor(radius))));
+        else
+          div += 2 * (out[-len + 1] = out[len - 1] = 512);
+      }
+    }
+    else if (type == 1) // triangle
+    {
+      for (i = 1; i < len; i++)
+        div += 2 * (out[-i] = out[i] = (sInt) (512.0f * (1.0f - i / radius)));
+    }
+    else // gaussian
+    {
+      const sF32 sigma = -2.0f / (radius * radius);
+      for (i = 1; i < len; i++)
+        div += 2 * (out[-i] = out[i] = (sInt) (512.0f * exp(i * i * sigma)));
+    }
+
+    gk[1026] = (sInt) (div / sc);
+    return out;
+  }
+
+  static void blur(sU16 *out, const sU16 *in, sInt w, sInt h, sInt len, sInt wrap, sInt dir)
+  {
+    const sInt lh = len / 2, dvi = (1 << 24) / gk[1026];
+    const sInt rd = dir ? h : w, f = dir ? w * 4 : 4;
+
+    for (sInt y = 0, o = 0; y < h; y++)
+    {
+      for (sInt x = 0; x < w; x++, o += 4)
+      {
+        const sInt rc = dir ? y : x;
+        sU32 sum[4] = { 0, 0, 0, 0 };
+
+        for (sInt j = -lh + 1; j < lh; j++)
+        {
+          sInt so;
+          if (((sUInt) (rc + j)) < (sUInt) rd)
+            so = j * f;
+          else if (wrap == 1)
+            so = (rc + j < 0) ? -rc * f : (rd - 1 - rc) * f;
+          else if (wrap == 2)
+            so = (((rc + j + rd) & (rd - 1)) - rc) * f;
+          else
+            continue;
+
+          const sInt kw = (short) (gk[512 + j] & 0xffff);
+          const sU16 *px = in + o + so;
+          for (sInt c = 0; c < 4; c++)
+            sum[c] += (sU32) ((short) px[c] * kw);
+        }
+
+        for (sInt c = 0; c < 4; c++)
+        {
+          sU32 v = (sU32) (((unsigned long long) sum[c] * (sU32) dvi) >> 24);
+          out[o + c] = (sU16) (v > 0x7fff ? 0x7fff : v);
+        }
+      }
+    }
+  }
+
+  void doProcess()
+  {
+    const sInt w = data->w, h = data->h;
+    const sU16 *in = getInputData(0)->data;
+    sU16 *out = data->data;
+    sU16 *temp = new sU16[w * h * 4];
+    sInt len;
+
+    const sU16 *src2 = (ra <= 1.0f && intens == 1.0f) ? in : temp;
+    sU16 *dst1 = (rb <= 1.0f && intens == 1.0f) ? out : temp;
+    sBool blurred = sFALSE;
+
+    if (intens > 0.0f)
+    {
+      if (ra > 1.0f || intens != 1.0f)
+      {
+        kernel(filter, ra, len, intens);
+        blur(dst1, in, w, h, len, wrap, 0);
+        blurred = sTRUE;
+      }
+      if (rb > 1.0f || intens != 1.0f)
+      {
+        kernel(filter, rb, len, intens);
+        blur(out, src2, w, h, len, wrap, 1);
+        blurred = sTRUE;
+      }
+      if (!blurred)
+        memcpy(out, in, w * h * 8);
+    }
+    else
+      memset(out, 0, w * h * 8);
+
+    delete[] temp;
+  }
+
+public:
+  const sU8* readData(const sU8* strm)
+  {
+    // as RG2's exporter writes it: filter, intensity*256, border, (radius-1)*512 twice
+    filter = *strm++;
+    intens = *reinterpret_cast<const sU16*>(strm) / 256.0f;
+    strm += 2;
+    wrap = *strm++;
+    ra = reinterpret_cast<const sU16*>(strm)[0] / 512.0f + 1.0f;
+    rb = reinterpret_cast<const sU16*>(strm)[1] / 512.0f + 1.0f;
+    return strm + 4;
+  }
+
+  void setAnim(sInt index, const sF32* val)
+  {
+    switch (index)
+    {
+    case 1: // radius
+      ra = val[0];
+      rb = val[1];
+      break;
+    case 2: // intensity
+      intens = val[0];
+      break;
+    }
+  }
+};
+
+sInt frOpTFBlur::gk[1027];
+
+frOperator* create_TFBlur() { return new frOpTFBlur; }
