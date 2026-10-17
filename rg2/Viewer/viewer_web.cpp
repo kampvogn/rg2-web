@@ -34,6 +34,9 @@ EM_ASYNC_JS(void, web_wait_frame, (), {
 EM_JS(int, web_quit, (), { return Module.webQuit ? 1 : 0; });
 EM_JS(void, web_progress, (double f), { if (Module.onProgress) Module.onProgress(f); });
 EM_JS(void, web_end, (const char *why), { if (Module.onDemoEnd) Module.onDemoEnd(UTF8ToString(why)); });
+EM_JS(int, web_start_ms, (), { return Module.startMs | 0; });
+
+extern "C" void ssSetStart(sS32 ms);
 
 static void __stdcall tgPoll(sInt cnt, sInt max)
 {
@@ -114,12 +117,21 @@ int main()
   if (loaderTune)
     ssClose();
 
+  // Module.startMs (the page's ?t=) starts somewhere in the middle: the
+  // timeline is run up to there once, and the music plays from there
+  const sInt startMs = web_start_ms();
   ssInit((sU8*) viruzPtr, 0);
+  ssSetStart(startMs);
   ssPlay();
   while (ssGetTime() < 0)
     web_wait_frame();
 
   sInt oldTime = 0;
+  if (startMs > 0)
+  {
+    opsAnimate(-1, 0, startMs / 8);
+    oldTime = startMs / 8;
+  }
   while (!web_quit())
   {
     sInt time = ssGetTime() / 8; // exported timing is in 1/125s, not ms.

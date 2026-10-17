@@ -6,6 +6,9 @@
 #include "debug.h"
 #include "tool.h"
 #include "directx.h"
+#ifdef RG2_TRACE
+#include <stdio.h>
+#endif
 
 #define  WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -1459,6 +1462,13 @@ pixlp:
       tmp=new sU8[rw*rh*4];
       for (i = 0; i < rw*rh*4; i++)
         tmp[i] = img[i] >> 7;
+#ifdef RG2_TRACE
+      {
+        sU32 amin = 255, amax = 0, asum = 0;
+        for (i = 0; i < rw*rh; i++) { sU32 a = tmp[i*4+3]; if (a < amin) amin = a; if (a > amax) amax = a; asum += a; }
+        printf("upl %p %dx%d alpha %d..%d avg %d raw0 %04x %04x %04x %04x\n", this, rw, rh, amin, amax, asum / (rw*rh), img[0], img[1], img[2], img[3]);
+      }
+#endif
 #endif
 #ifndef FVS_TINY_TEXTURE_CODE
       else

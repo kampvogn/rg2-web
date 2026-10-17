@@ -20,6 +20,7 @@ extern "C" const sU8 *web_data_end;
 static SDL_AudioDeviceID dev;
 static double startTime = -1;   // audio context time of the first callback after ssPlay()
 static int playing = 0, ready = 0;
+static sS32 startMs = 0;        // where in the song ssPlay() starts (ssSetStart)
 
 EM_JS(double, web_audio_time, (), {
   const c = (typeof SDL2 !== 'undefined' && SDL2.audioContext) ? SDL2.audioContext : null;
@@ -69,7 +70,7 @@ extern "C"
   void __stdcall ssPlay()
   {
     SDL_LockAudioDevice(dev);
-    v2web_play(0);
+    v2web_play(startMs);
     startTime = -1;
     playing = 1;
     SDL_UnlockAudioDevice(dev);
@@ -87,8 +88,10 @@ extern "C"
   {
     if (!playing || startTime < 0) return -1; // the viewer waits while this is negative
     double ms = (web_audio_time() - startTime) * 1000.0 - WEBSAMPLES * 1000.0 / 44100.0;
-    return ms < 0 ? 0 : (sS32)ms;
+    return startMs + (ms < 0 ? 0 : (sS32)ms);
   }
+
+  void ssSetStart(sS32 ms) { startMs = ms > 0 ? ms : 0; }
 
   void __stdcall ssFadeOut(sU32) {}
   void __stdcall ssDoTick() {}

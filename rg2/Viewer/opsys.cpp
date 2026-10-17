@@ -435,6 +435,12 @@ const sU8* opsInitialize(const sU8* strm)
   {
     frOperator* theOp = operatorTree[i];
 
+#ifdef RG2_TRACE
+    printf("TRACE link %d %p %02x anim %d:", i, theOp, theOp->def->id, (int) theOp->anim);
+    for (sInt j = 0; j < theOp->nInputs; j++)
+      printf(" %p", theOp->input[j]);
+    printf("\n");
+#endif
     for (sInt j = 0; j < theOp->nInputs; j++)
     {
       frOperator* in = theOp->input[j];
@@ -446,6 +452,24 @@ const sU8* opsInitialize(const sU8* strm)
   // that's it
   return strm;
 }
+
+#ifdef RG2_TRACE
+#include <emscripten.h>
+// Module.dumpOps = [op indices]: logs those textures as PNG data URLs ("dump <i> <url>")
+EM_JS(void, web_dump_tex, (int i, const unsigned short *d, int w, int h), {
+  if (!Module.dumpOps || Module.dumpOps.indexOf(i) < 0) return;
+  const c = document.createElement('canvas'); c.width = w; c.height = h * 2;
+  const g = c.getContext('2d'), im = g.createImageData(w, h * 2);
+  for (let k = 0; k < w * h; k++) {
+    for (let ch = 0; ch < 3; ch++) im.data[k * 4 + ch] = Math.min(255, HEAPU16[(d >> 1) + k * 4 + 2 - ch] >> 7);
+    im.data[k * 4 + 3] = 255;
+    const a = Math.min(255, HEAPU16[(d >> 1) + k * 4 + 3] >> 7), o = (w * h + k) * 4;
+    im.data[o] = im.data[o + 1] = im.data[o + 2] = a; im.data[o + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  console.log('dump ' + i + ' ' + c.toDataURL());
+});
+#endif
 
 void opsCalculate(void (__stdcall *poll)(sInt counter, sInt max))
 {
@@ -464,11 +488,13 @@ void opsCalculate(void (__stdcall *poll)(sInt counter, sInt max))
     }
 
 #ifdef RG2_TRACE
-    printf("TRACE op %d id %02x refs %d\n", i, op->def->id, op->refNum);
+    printf("TRACE op %d id %02x refs %d ptr %p\n", i, op->def->id, op->refNum, op);
 #endif
     op->process();
 #ifdef RG2_TRACE
     if (op->def->id < 0x80 && texOp->getData()) printf("TRACE   tex %dx%d\n", texOp->getData()->w, texOp->getData()->h);
+    if (op->def->id < 0x80 && texOp->getData())
+      web_dump_tex(i, texOp->getData()->data, texOp->getData()->w, texOp->getData()->h);
 #endif
 
     if (!op->anim)

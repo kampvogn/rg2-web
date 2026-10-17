@@ -64,16 +64,16 @@ lp1:
   }
 }
 
+// the tool's Add (texcombine.cpp) for negative gains: every pixel, from
+// cnt - 1 down to 0 (the viewer's copy of this loop stops after one pixel)
 static void sub_asm(sU16 *dst, const sU16 *src, sInt cnt, sInt gain)
 {
+  cnt--;
   __asm
   {
     mov       esi, [src];
     mov       edi, [dst];
     mov       ecx, [cnt];
-    lea       esi, [esi + ecx * 8];
-    lea       edi, [edi + ecx * 8];
-    neg       ecx;
     movd      mm2, [gain];
     punpcklwd mm2, mm2;
     punpcklwd mm2, mm2;

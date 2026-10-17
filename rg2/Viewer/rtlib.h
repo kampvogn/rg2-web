@@ -15,6 +15,15 @@
 
 #pragma intrinsic (sin, cos, atan2, sqrt, memcpy, memset, fabs, pow, exp)
 
+#ifdef __EMSCRIPTEN__
+// kampvogn.dk: pow is Rtlib.asm's in the intros, which returns 0 for a base
+// of 0 whatever the exponent (the C library says pow(0, 0) = 1) and NaN for
+// a negative base (fyl2x). ein.schlag's glow gradients with exponent 0 rely
+// on the 0: black outside the glow, not the glow's brightness everywhere.
+static inline double rtlib_pow(double a, double b) { return a == 0.0 ? 0.0 : a < 0.0 ? NAN : pow(a, b); }
+#define pow rtlib_pow
+#endif
+
 extern "C" size_t __cdecl   strlen(const char *s);
 
 #endif

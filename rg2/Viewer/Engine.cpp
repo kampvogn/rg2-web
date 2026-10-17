@@ -8,6 +8,9 @@
 #include "engine.h"
 #include "opsys.h"
 #include "debug.h"
+#ifdef RG2_TRACE
+#include <stdio.h>
+#endif
 
 #pragma warning (disable: 4244 4018)
 
@@ -19,6 +22,7 @@ static fvs::ibSlice*	ibs;
 
 static void setupLighting(const frModel* mdl, const fr::vector defaultLightDir);
 static void paintObject(const frObject& obj, const sU16 *indices);
+static const sU16 *sortIndices(const frObject& obj, const fr::vector& modelViewZ);
 static void setMatrices(const frObject* obj);
 
 // code
@@ -63,12 +67,12 @@ void enginePaint(frGeometryOperator* plg, const fr::matrix& cam, sF32 w, sF32 h)
   frModel* model=plg->getData();
   if (model)
   {
-    frObject* passes[8];
+    frObject* passes[16]; // kampvogn.dk: 8 normal + 8 sorted, as in the editor (engine.cpp)
     sInt      i;
 
     setupLighting(model, cam.getZVector()); // prepare lighting
     
-    for (i = 0; i < 8; i++)
+    for (i = 0; i < 16; i++)
       passes[i] = 0;
 
     // prepare draw lists
@@ -138,6 +142,7 @@ void enginePaint(frGeometryOperator* plg, const fr::matrix& cam, sF32 w, sF32 h)
         fr::vector tPos;
         tPos.transform(curObj.bPos, cam); // =bounding sphere center in view space
 
+#ifndef RG2_NOCULL
         if (tPos.z + curObj.bRadius < 0.1f) // object behind znear?
           continue;
 
@@ -146,6 +151,7 @@ void enginePaint(frGeometryOperator* plg, const fr::matrix& cam, sF32 w, sF32 h)
 
         if (fabs(tPos.y * h) > curObj.bRadius * sy + tPos.z) // not in top/bottom bounds?
           continue;
+#endif
       }
 
       curObj.drawMesh = msh;
@@ -156,15 +162,105 @@ void enginePaint(frGeometryOperator* plg, const fr::matrix& cam, sF32 w, sF32 h)
       if (mat->flags12 & 128)
         objPass = mat->flags13 & 7;
 
+      // kampvogn.dk: the material's "sort" setting (flags12 bit 4, the
+      // editor's sortMode), which this viewer ignored: such objects are
+      // painted after the solid ones of their pass, their triangles back to
+      // front, the way the editor draws them. Text panels and other alpha
+      // blended objects that write z need it, or they hide what is behind them.
+      if (mat->flags12 & 16)
+        objPass += 8;
+
       curObj.next = passes[objPass];
       passes[objPass] = &curObj;
     }
 
     // draw it
     for (i = 0; i < 8; i++)
+    {
       for (const frObject* obj = passes[i]; obj; obj = obj->next)
         paintObject(*obj, obj->drawMesh->indices);
+
+      for (const frObject* obj = passes[i + 8]; obj; obj = obj->next)
+      {
+        fr::matrix modelView;
+        modelView.mul(obj->getTransform(), cam);
+        paintObject(*obj, sortIndices(*obj, fr::vector(modelView(0,2), modelView(1,2), modelView(2,2))));
+      }
+    }
   }
+}
+
+// kampvogn.dk: the editor's sortIndices (engine.cpp): the object's triangles
+// ordered back to front along modelViewZ (radix sort on the summed view z).
+// Returns the sorted index list, or the mesh's own for non-triangle meshes.
+static const sU16 *sortIndices(const frObject& obj, const fr::vector& modelViewZ)
+{
+  struct alphaFace { sU32 zval; sU16 ind[3]; };
+  static alphaFace *faces1 = 0, *faces2 = 0;
+  static sU16 *sorted = 0;
+  static sU32 capacity = 0;
+
+  const frMesh* msh = obj.drawMesh;
+  if (msh->type != 0)
+    return msh->indices;
+
+  if (msh->nPrims > capacity)
+  {
+    delete[] faces1; delete[] faces2; delete[] sorted;
+    capacity = msh->nPrims;
+    faces1 = new alphaFace[capacity];
+    faces2 = new alphaFace[capacity];
+    sorted = new sU16[capacity * 3];
+  }
+
+  const frVertex* vtx = msh->vertices;
+  const sU16* ind = msh->indices;
+  alphaFace* af = faces1;
+  sU32 histogram[1024];
+  memset(histogram, 0, sizeof(histogram));
+
+  for (sU32 i = 0; i < msh->nPrims; i++, ind += 3, af++)
+  {
+    const sF32 z = vtx[ind[0]].pos.dot(modelViewZ) + vtx[ind[1]].pos.dot(modelViewZ) + vtx[ind[2]].pos.dot(modelViewZ);
+    sU32 zi;
+    memcpy(&zi, &z, 4);
+    const sU32 zVal = ((sU32)((sS32) zi >> 31) | 0x80000000) ^ ~zi;
+
+    af->zval = zVal;
+    af->ind[0] = ind[0];
+    af->ind[1] = ind[1];
+    af->ind[2] = ind[2];
+
+    histogram[  0 + ((zVal >>  0) & 0xff)]++;
+    histogram[256 + ((zVal >>  8) & 0xff)]++;
+    histogram[512 + ((zVal >> 16) & 0xff)]++;
+    histogram[768 + ((zVal >> 24) & 0xff)]++;
+  }
+
+  alphaFace *in = faces1, *out = faces2;
+  for (sInt pass = 0; pass < 4; pass++)
+  {
+    sU32 offset[256];
+    for (sU32 j = 0, cur = 0; j < 256; j++)
+    {
+      offset[j] = cur;
+      cur += histogram[pass * 256 + j];
+    }
+
+    for (sU32 k = 0; k < msh->nPrims; k++)
+      out[offset[(in[k].zval >> (pass * 8)) & 0xff]++] = in[k];
+
+    alphaFace* t = in; in = out; out = t;
+  }
+
+  for (sU32 k = 0; k < msh->nPrims; k++)
+  {
+    sorted[k * 3 + 0] = in[k].ind[0];
+    sorted[k * 3 + 1] = in[k].ind[1];
+    sorted[k * 3 + 2] = in[k].ind[2];
+  }
+
+  return sorted;
 }
 
 static sBool cullDisabled, lightChanged = sFALSE;
@@ -208,7 +304,7 @@ static void paintObject(const frObject &obj, const sU16 *indices)
 			else
 				vstart = myMesh->vbuf->use();
 
-			if (!myMesh->ibuf) // no static buffer
+			if (!myMesh->ibuf || indices != myMesh->indices) // no static buffer (or sorted indices, kampvogn.dk)
 			{
         const sInt indexCount = myMesh->nPrims * (3 - myMesh->type);
 				ibs->fillFrom(indices, indexCount);
@@ -267,7 +363,29 @@ static void setupLighting(const frModel* mdl, const fr::vector defaultLightDir)
 
     if (d3dlight.Theta > d3dlight.Phi)
       d3dlight.Theta = d3dlight.Phi;
+    // kampvogn.dk: a spot light with falloff 0 (1/32768 after export) lights
+    // all around, as it did on the cards of the time: ein.schlag's lantern
+    // lights the whole cave blue in recordings of the intro. Direct3D's
+    // documented cone, which the WebGL fixed function follows, leaves
+    // everything outside it dark.
+    if (d3dlight.Type == D3DLIGHT_SPOT && d3dlight.Falloff < 0.01f)
+      d3dlight.Type = D3DLIGHT_POINT;
 
+#ifdef RG2_TRACE
+    {
+      static sU32 seenHash[64]; static sInt nSeen = 0;
+      sU32 h = 0; const sU32* w = (const sU32*) &d3dlight;
+      for (sInt k = 0; k < (sInt)(sizeof(d3dlight) / 4); k++) h = h * 31 + w[k];
+      sInt k = 0; while (k < nSeen && seenHash[k] != h) k++;
+      if (k == nSeen && nSeen < 64)
+      {
+        seenHash[nSeen++] = h;
+        printf("light %d type %d diff %.2f %.2f %.2f amb %.2f %.2f pos %.1f %.1f %.1f dir %.2f %.2f %.2f range %.1f fall %g att %.3f %.3f %.3f th %.2f ph %.2f\n", i, d3dlight.Type,
+          d3dlight.Diffuse.r, d3dlight.Diffuse.g, d3dlight.Diffuse.b, d3dlight.Ambient.b, d3dlight.Ambient.a, d3dlight.Position.x, d3dlight.Position.y, d3dlight.Position.z,
+          d3dlight.Direction.x, d3dlight.Direction.y, d3dlight.Direction.z, d3dlight.Range, d3dlight.Falloff, d3dlight.Attenuation0, d3dlight.Attenuation1, d3dlight.Attenuation2, d3dlight.Theta, d3dlight.Phi);
+      }
+    }
+#endif
     fvs::d3ddev->SetLight(i, &d3dlight);
     fvs::d3ddev->LightEnable(i, TRUE);
   }
@@ -327,6 +445,20 @@ void engineSetMaterial(const frMaterial* mat)
 		return;
 	}
 
+#ifdef RG2_TRACE
+	{
+		static const frMaterial* seen[512];
+		static sInt nSeen = 0;
+		sInt k = 0;
+		while (k < nSeen && seen[k] != mat) k++;
+		if (k == nSeen && nSeen < 512)
+		{
+			seen[nSeen++] = mat;
+			printf("mat %p tex %p/%p f11 %02x f12 %02x (alpha %d z %d light %d) f13 %02x (op1 %d aop1 %d) f21 %02x\n", mat, mat->tex[0], mat->tex[1],
+				mat->flags11, mat->flags12, (mat->flags12 >> 2) & 3, mat->flags12 & 3, !(mat->flags12 & 32), mat->flags13, mat->flags13 >> 5, (mat->flags13 >> 3) & 3, mat->flags21);
+		}
+	}
+#endif
   mat->tex[0]->use();
 
 	setupTextureStage(0, mat->flags11);

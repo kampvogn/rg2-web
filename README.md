@@ -1,4 +1,4 @@
-# RG2 intros in the browser (work in progress)
+# RG2 intros in the browser
 
 Farbrausch's RG2 ("RauschGenerator 2") was the tool behind three of their
 productions from 2001–2002, all released with source and data in
@@ -22,8 +22,31 @@ code to WebAssembly, Direct3D through
    loading and exporting code without the GUI, as a 32-bit x86 Linux program
    (clang keeps the operators' MS-style inline assembly), and writes
    `export.dat` for each of the three projects.
-2. **Player – next.** Port `rg2/Viewer` (Direct3D 8, Win32, x86 assembly for the
-   synthesizer, sound output and runtime) to WebAssembly.
+2. **Player – done.** `rg2/Viewer` runs as WebAssembly (`web/build.sh`):
+   the MMX/x86 assembly is ported to C (`rg2/Viewer/texop_c.h`, checked
+   bit for bit against the original by `tools/test-texop.sh`), the V2 synth
+   and DirectSound by V2MPlayer on SDL audio (`web/src`), Direct3D 8 by a thin
+   shim over d3d9-webgl (`web/shim/d3d8.h`), GDI text by a 2D canvas.
+3. **Compared with recordings of the released intros**, frame by frame.
+   Where the published viewer source differs from what the intros look like,
+   the port follows the intros (all marked `kampvogn.dk` in the source):
+   - materials set to *sort* (transparent text panels, ein.schlag's credits)
+     are painted after the solid objects, back to front, as in the tool;
+   - Add with a negative gain subtracts every pixel, as in the tool (the
+     viewer's loop stopped after one), and `pow(0, y)` is 0, as in the
+     intros' own runtime (`Rtlib.asm`) – together they give ein.schlag's
+     Buddha his head;
+   - a spot light with falloff 0 lights all around (ein.schlag's blue cave).
+
+   Known differences: flybye's invitation text (the scrolling party info) is
+   not part of the published project, and ein.schlag's candle flames come out
+   as white squares. The ein.schlag and dopplerdefekt data are not the exact
+   versions in the recordings (other credits, some camera moves).
+
+The page takes `?t=<seconds>` to start somewhere in the middle (the timeline
+is run up to there, the music plays from there). A build with
+`CFLAGS_EXTRA=-DRG2_TRACE` logs operators, materials, lights and texture
+uploads to the console.
 
 ## Exporting
 

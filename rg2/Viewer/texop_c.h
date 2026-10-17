@@ -35,12 +35,16 @@ namespace texop_c
     }
   }
 
-  // The asm loop for negative gains counts down from -cnt and stops after one
-  // pixel (dec/jns); kept as it is, since that is what the intros show.
+  // dst -= 2 * ((src * gain) >> 16), per channel, saturating at 0 (psubusw).
+  // The viewer's asm for negative gains starts at -cnt but counts down
+  // (dec/jns), so it stops after the first pixel; the tool's own Add
+  // (texcombine.cpp) counts from cnt - 1 down to 0 and does every pixel, and
+  // that is what the released intros show (ein.schlag's Buddha head: its
+  // height map has the eyes and the background subtracted).
   static void subGain(sU16 *dst, const sU16 *src, sInt cnt, sInt gain)
   {
     const sInt g = s16(gain);
-    for (sInt i = 0; i < 4; i++)
+    for (sInt i = 0; i < cnt * 4; i++)
     {
       sInt m = (((s16(src[i]) * g) >> 16) << 1) & 0xffff;
       sInt d = dst[i] - m;

@@ -1,6 +1,9 @@
 // This code is in the public domain. See LICENSE for details.
 
 #include "types.h"
+#ifdef RG2_TRACE
+#include <stdio.h>
+#endif
 #include "math3d_2.h"
 #include "opsys.h"
 #include "opdata.h"
@@ -585,6 +588,10 @@ public:
 
     opType = 1; // semi-hard
     initMesh();
+#ifdef RG2_TRACE
+    printf("TRACE prim %p type %d out %d tess %d %d %d verts %d prims %d s %g %g %g r %g %g %g t %g %g %g\n", this, m_type, m_normalsOut, m_tesselation[0], m_tesselation[1], m_tesselation[2],
+      mesh->nVerts, mesh->nPrims, m_xform[0].x, m_xform[0].y, m_xform[0].z, m_xform[1].x, m_xform[1].y, m_xform[1].z, m_xform[2].x, m_xform[2].y, m_xform[2].z);
+#endif
 
     return strm;
   }
@@ -949,6 +956,15 @@ class frOpGFSelect: public frGeometryOperator
         }
         break;
       }
+#ifdef RG2_TRACE
+      {
+        sInt sv = 0, sf = 0;
+        for (sInt k = 0; k < (sInt) msh->nVerts; k++) sv += msh->vertices[k].select == 3;
+        for (sInt k = 0; k < (sInt) msh->nPrims; k++) sf += msh->primSelect[k] != 0;
+        printf("TRACE select %p mode %d shape %d greedy %d pos %g %g %g size %g %g %g: verts %d/%d faces %d/%d\n", this, m_mode, m_selShape, m_selMode,
+          m_pos.x, m_pos.y, m_pos.z, m_size.x, m_size.y, m_size.z, sv, msh->nVerts, sf, msh->nPrims);
+      }
+#endif
     }
   }
 
@@ -1115,6 +1131,11 @@ class frOpGFBend: public frGeometryOperator
     sF32 minY, maxY, md;
 
     bendPlodeFirstPass(data, input, m_mode == 1, minY, maxY, md);
+#ifdef RG2_TRACE
+    printf("TRACE bend %p w %d mode %d blend %d y %g..%g x0 %g %g %g / %g %g %g / %g %g %g  x1 %g %g %g / %g %g %g / %g %g %g\n", this, m_weight, m_mode, m_blend, minY, maxY,
+      m_xform[0].x, m_xform[0].y, m_xform[0].z, m_xform[1].x, m_xform[1].y, m_xform[1].z, m_xform[2].x, m_xform[2].y, m_xform[2].z,
+      m_xform[3].x, m_xform[3].y, m_xform[3].z, m_xform[4].x, m_xform[4].y, m_xform[4].z, m_xform[5].x, m_xform[5].y, m_xform[5].z);
+#endif
 
     // second pass: perform bend
     fr::matrix xform1, xform2, xfon1, xfon2;

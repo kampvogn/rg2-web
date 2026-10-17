@@ -7,6 +7,9 @@
 #include "geometry.h"
 #include "engine.h"
 #include "directx.h"
+#ifdef RG2_TRACE
+#include <stdio.h>
+#endif
 
 // this must match (the beginning of) frMaterial!
 struct fadeMaterialDef
@@ -269,6 +272,25 @@ void cmpPaintFrame()
 
   firstCompose = sTRUE;
 
+#ifdef RG2_TRACE
+  struct walker { static void walk(frOperator* op, sInt depth, sInt& budget) {
+    if (!op || budget-- <= 0) return;
+    printf("cmp tree %*s%p(%02x) objs %d\n", depth, "", op, op->def->id,
+      op->def->id >= 0x80 && op->def->id < 0xc0 && ((frGeometryOperator*) op)->getData() ? ((frGeometryOperator*) op)->getData()->nObjects : -1);
+    for (sInt i = 0; i < op->nInputs; i++) walk(op->input[i], depth + 1, budget);
+  } };
+  static frCompositingOperator* traced = 0;
+  if (lastComposeOp != traced)
+  {
+    traced = lastComposeOp;
+    printf("cmp paint %p inputs %d:", traced, traced ? traced->nInputs : 0);
+    for (sInt i = 0; traced && i < traced->nInputs; i++)
+      printf(" %p(%02x)", traced->input[i], traced->input[i] ? traced->input[i]->def->id : 0);
+    printf("\n");
+    sInt budget = 400;
+    walker::walk(traced, 0, budget);
+  }
+#endif
   if (lastComposeOp)
     lastComposeOp->paint();
 }

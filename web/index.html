@@ -68,6 +68,7 @@ var Module = {
 		document.body.classList.remove('playing');
 		window.__ended = why || 'end';
 	},
+	startMs: Math.max(0, +(new URLSearchParams(location.search).get('t') || 0) * 1000) | 0,
 	onRuntimeInitialized: () => { window.__ready = true; },
 };
 $('go').addEventListener('click', async () => {

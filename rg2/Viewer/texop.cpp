@@ -1175,6 +1175,10 @@ public:
       yc = reinterpret_cast<const sS16*>(strm)[2] / 256.0f;
       strm += 6;
     }
+#ifdef RG2_TRACE
+    printf("TRACE grad %p type %d c0 %d %d %d c1 %d %d %d xc %g yc %g x2 %g y2 %g scv %d expon %g isc %g\n", this, type, color[0], color[1], color[2], color[3], color[4], color[5],
+      xc, yc, type ? 0.0f : x2, type ? 0.0f : y2, type ? scv : 0, type ? expon : 0.0f, type ? isc : 0.0f);
+#endif
 
     return strm;
   }
