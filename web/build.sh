@@ -1,4 +1,7 @@
 #!/bin/sh
+# Asyncify only where the player waits for the next frame (main, tgPoll via
+# opsCalculate's function pointer): instrumenting everything, the audio
+# callback included, made iPhones (iOS 26) kill the page after ~10 s of sound.
 # Build the RG2 viewer (Farbrausch's player for flybye, ein.schlag and
 # dopplerdefekt) to WebAssembly: web/build/rg2.js and rg2.wasm. The intros'
 # data are tools/rg2export's export.dat files (web/build/<intro>.dat).
@@ -22,6 +25,6 @@ em++ $V2 -c v2/v2mconv.cpp -o $OUT/v2mconv.o 2> $OUT/v2mconv.err && echo "ok   v
 em++ -std=gnu++17 -O2 -w -I/w/d3d9-webgl -c d3d9-webgl/d3d9.cpp -o $OUT/d3d9.o 2> $OUT/d3d9.err && echo "ok   d3d9-webgl" || fail=1
 [ $fail = 0 ]
 em++ -O2 $OUT/*.o -o $OUT/rg2.js -sUSE_SDL=2 -sUSE_WEBGL2=1 -sFULL_ES3=1 -sMAX_WEBGL_VERSION=2 \
-  -sASYNCIFY -sASYNCIFY_STACK_SIZE=1048576 -sSTACK_SIZE=8MB -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=256MB \
+  -sASYNCIFY -sASYNCIFY_IGNORE_INDIRECT "-sASYNCIFY_ADD=[\"opsCalculate*\"]" -sASYNCIFY_REMOVE=SDL_RunAudio -sASYNCIFY_STACK_SIZE=1048576 -sSTACK_SIZE=8MB -sALLOW_MEMORY_GROWTH -sINITIAL_MEMORY=256MB \
   -sENVIRONMENT=web -sINVOKE_RUN=0 -sEXIT_RUNTIME=0 -sFORCE_FILESYSTEM -sEXPORTED_RUNTIME_METHODS=callMain,FS $EXTRA_LDFLAGS 2> $OUT/link.err \
   && echo "linked $(wc -c < $OUT/rg2.wasm) bytes" || { grep -o "undefined symbol: .*" $OUT/link.err | sort -u | head -40; exit 1; }'
